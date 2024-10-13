@@ -2,26 +2,30 @@ import streamlit as st
 import pandas as pd
 import time
 
-st.title("Prod Incident Cause Analysis Using GenAI 🧠")
+st.title("Log analyzer for priority incidents 🧠")
 st.write("---")
 
-st.title(":blue[Initiate Analysis Request] :warning:")
+st.title(":blue[Initiate root cause analysis] :warning:")
 
 col1, col2 = st.columns(2)
 
 ## Increase the size of the labels
 with col1:
-    st.write('Select your LLM')
-    title = st.text_input('Blocked for now', 'Antrhopic', disabled=True)
-with col2:
-    st.write('Select your App Framework')
+    st.write('Select LLM of your choice')
     option = st.selectbox(
         "Choose from dropdown",
-        ("Dot Net", "IBM BPM", "Linux"),
+        ("Antrhopic", "Meta", "Titan", "Cohere", "Jurassic", "Mistral"),
     )
+with col2:
+    st.write('Select your application frameworks')
+    options = st.multiselect(
+        "Select all those frameworks applicable for your application",
+        ["Dot Net", "IBM BPM", "Linux"],
+    )
+
 ## Increase the size of the labels
 workaround = st.text_area(
-    "# Instructions or Workaround (Optional)",
+    "# Error Report: Action Taken (Optional)",
     # "It was the best of times, it was the worst of times, it was the age of ",
     )
 st.write(f'You wrote {len(workaround)} characters.')
@@ -32,39 +36,45 @@ uploaded_file = st.file_uploader(  "Upload your log file",
                                     accept_multiple_files=False,
                                     type=['txt'],
                                     )
-if uploaded_file is not None:
+if uploaded_file is None:
+    st.error("Please upload a log file for analysis.")
+else:
     print(type(uploaded_file))
-    with open('input/user_input.txt', 'wb') as file:
+    with open('input/{uploaded_file.name}', 'wb') as file:
         file.write(uploaded_file.read())
     
-    with open('input/user_input.txt', 'r') as file:
+    with open('input/{uploaded_file.name}', 'r') as file:
         st.text_area('Input Log File', ''.join(file), height=400)
-
         
-if st.button("Generate Analysis :mag:", type="primary"):
+if st.button("Analysis :mag:", type="primary"):
     progress_text = "Initiating server..."
     my_bar = st.progress(0, text=progress_text)
-    time.sleep(1)
+    time.sleep(2)
     
     ########## Backend - Chunking
     progress_text = "Chunking log file..."
     my_bar.progress(20, text=progress_text)
+    time.sleep(2)
 
     ######### Backend - VectorDB
-    progress_text = "Initiaing VectorDB and Inserting vectors..."
+    progress_text = "Initiaing vectorDB and inserting vectors..."
     my_bar.progress(30, text=progress_text)
+    time.sleep(2)
     
     ######### Backend - LLM
     progress_text = "Initiaing LLM API..."
     my_bar.progress(50, text=progress_text)
+    time.sleep(2)
     
     ######### Backend - Chunk Summaries
     progress_text = "Summerizing chunks..."
     my_bar.progress(70, text=progress_text)
+    time.sleep(2)
     
     ######## Backend - Report Generation
     progress_text = "Generating report..."
     my_bar.progress(80, text=progress_text)
+    time.sleep(2)
     
     ######## Printing the report
     progress_text = "Publishing the report..."
@@ -76,16 +86,16 @@ if st.button("Generate Analysis :mag:", type="primary"):
     report={'Cause': 'The incidents were caused by:\n\n- Missing view file resulting in ViewNotFoundException\n- Invalid file path leading to FileNotFoundException \n- Database connectivity issues causing SqlException\n- Attempt to divide by zero resulting in DivideByZeroException\n- Potential null reference or divide by zero in StatsService', 'Solution': 'Some solutions to fix these are:\n\n- For missing view, ensure view file exists in expected location\n- Validate file path before processing file import\n- Check database connection string, network connectivity\n- Add null check before division to prevent divide by zero\n- Validate input arrays to avoid null reference\n- Add detailed exception handling and logging\n- Handle expected exceptions like FileNotFound and DivideByZero specifically\n- Review calculation logic to prevent errors\n- Add more logging at exception origin to identify root cause'}
     
     ####### Display Report
-    st.title(":blue[Incident Analysis Report] :zap:")
+    st.title(":blue[Incident analysis report] :zap:")
     
     tab1, tab2, tab3 = st.tabs(["Analysis", "Solution", "References"])
 
     with tab1:
-        st.header("Incident Cause Analysis")
+        st.header("Incident root cause")
         md = st.text_area('Below is the cause report generated', report['Cause'], height=400)
     
     with tab2:
-        st.header("Suggested Solution")
+        st.header("Suggested solution")
         md = st.text_area('Below is the solution report generated', report['Solution'], height=400)
     
     with tab3:
@@ -104,4 +114,3 @@ if st.button("Generate Analysis :mag:", type="primary"):
             final_report.write(''.join(ref))
             
     st.download_button("Download Report", open('output/final_report.txt'))
-    

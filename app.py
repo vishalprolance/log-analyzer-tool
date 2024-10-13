@@ -5,59 +5,81 @@ import logging, os, time
 from datetime import datetime
 import Chunking, VectorDB, LLM, SmallSummary, LargeSummary
 
-######## Initiate Logging
+##### Logging #####
+log_dir = "syslogs/"
+
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+
+log_file = os.path.join(log_dir, f"{__name__}.log")
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-file_handler = logging.FileHandler(f"syslogs/{__name__}.log")
+
+file_handler = logging.FileHandler(log_file)
 file_handler.setLevel(logging.DEBUG)
+
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+
 logger.addHandler(file_handler)
 
-logger.info("Staring up...\n")
+logger.info("Staring up...")
+logger.debug("Debug information logged.")
+logger.error("An error occurred.")
 
-st.title("Prod Incident Cause Analysis Using GenAI 🧠")
+##### Logging #####
+##### Header #####
+
+st.title("Log analyzer for priority incidents 🧠")
 st.write("---")
 
-st.title(":blue[Initiate Analysis Request] :warning:")
+st.title(":blue[Initiate root cause analysis] :warning:")
 
 col1, col2 = st.columns(2)
 with col1:
     st.write('Select your LLM')
-    title = st.text_input('Blocked for now', 'Anthropic', disabled=True)
-with col2:
-    st.write('Select your App Framework')
     option = st.selectbox(
         "Choose from dropdown",
-        ("Dot Net", "IBM BPM", "Linux"),
+        ("Meta", "Titan", "Mistral"),
     )
+
+with col2:
+    st.write('Select your application framework/s')
+    options = st.multiselect(
+        "Select all those frameworks applicable for your application",
+        ["Dot Net", "IBM BPM", "Linux"],
+    )
+
+    #Create a dictionary to map framework names to their respective codes
     frameworks={
         'Dot Net':'dotnet',
         'IBM BPM':'ibmbpm',
         'Linux':'linux'
     }
-    
 
 workaround = st.text_area(
-    "# Instructions or Workaround (Optional)",
-    # "It was the best of times, it was the worst of times, it was the age of ",
+    "# Error Report: Action Taken (Optional)",
     )
-st.write(f'You wrote {len(workaround)} characters.')
 
+st.write(f'{len(workaround)} characters.')
 
 ########## UPOLOAD FILE
 uploaded_file = st.file_uploader(  "Upload your log file", 
                                     accept_multiple_files=False,
                                     type=['txt'],
                                     )
-if uploaded_file is not None:
+if uploaded_file is None:
+    st.error("Please upload a log file for analysis.")
+else:
     print(type(uploaded_file))
-    with open('input/user_input.txt', 'wb') as file:
+    with open('input/{uploaded_file.name}', 'wb') as file:
         file.write(uploaded_file.read())
     
-    with open('input/user_input.txt', 'r') as file:
+    with open('input/{uploaded_file.name}', 'r') as file:
         st.text_area('Input Log File', ''.join(file), height=400)
-
         
-if st.button("Generate Analysis :mag:", type="primary"):
+if st.button("Analyze :mag:", type="primary"):
     
     start_time = time.time()
     
@@ -68,14 +90,32 @@ if st.button("Generate Analysis :mag:", type="primary"):
     ########## Backend - Chunking
     progress_text = "Chunking log file..."
     my_bar.progress(20, text=progress_text)
-    chunking_obj = Chunking.LineBasedChunk("dotnet.txt")
+    chunking_obj = Chunking.SemanticChunking(uploaded_file)
     all_chunks = chunking_obj.getChunks()
 
     ######### Backend - VectorDB
-    progress_text = "Initiaing VectorDB and Inserting vectors..."
+    progress_text = "Initiaing vectorDB and inserting vectors..."
     my_bar.progress(30, text=progress_text)
-    vectorDB_obj = VectorDB.FAISS_VDB('dotnet')
-    vectorDB = vectorDB_obj.getVectorDB()
+    # Check if any frameworks are selected
+    if options:
+        # Calculate progress step
+        progress_step = 20 / len(options)  # We have 20% (50 - 30) to work with
+        current_progress = 31
+        
+    vectorDBs = {}
+    for framework in options:
+        progress_text = f"Initiating vectorDB for {framework}..."
+        my_bar.progress(int(current_progress), text=progress_text)
+        
+        framework_code = frameworks[framework]
+        vectorDB_obj = VectorDB.Milvus_VDB(framework_code)
+        vectorDBs[framework] = vectorDB_obj.getVectorDB()
+        
+        current_progress += progress_step
+        my_bar.progress(min(int(current_progress), 50))  # Ensure we don't exceed 50
+
+    # Final progress update
+    my_bar.progress(49, text="All VectorDBs initialized successfully!")
     
     ######### Backend - LLM
     progress_text = "Initiaing LLM API..."

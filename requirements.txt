@@ -23,3 +23,6 @@ beautifulsoup4
 pillow>=9.5,<10
 pypdf>=3.8,<4
 streamlit
+nltk
+pymilvus
+flair
