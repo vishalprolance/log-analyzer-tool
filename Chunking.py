@@ -2,10 +2,9 @@ import os, nltk
 import numpy as np
 from abc import ABC, abstractmethod
 from typing import List
-from flair.model import SequenceTagger
+from flair.models import SequenceTagger
 from flair.data import Sentence
 from flair.splitter import SegtokSentenceSplitter
-from langchain_openai.embeddings import AzureOpenAIEmbeddings
 from sklearn.metrics.pairwise import cosine_similarity
 from dotenv import load_dotenv, find_dotenv
 from tqdm import tqdm
