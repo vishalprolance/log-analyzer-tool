@@ -1,63 +1,58 @@
-import unittest
-from typing import List
-from unittest.mock import patch, MagicMock
+import string
 
-# Assuming the Chunking abstract class, AgenticChunking, and other dependencies are in chunking.py
-from chunking import AgenticChunking, Chunking
+class RecursiveCharacterTextSplitter:
+    """Splits text into chunks using a recursive approach based on character separators.
 
-class TestAgenticChunking(unittest.TestCase):
-    
-    def setUp(self):
-        # Setup the chunker with default model configurations
-        self.chunker = AgenticChunking()
+    Args:
+        chunk_size (int, optional): The maximum size of each chunk in characters. Defaults to 1000.
+        chunk_overlap (int, optional): The number of characters to overlap between chunks. Defaults to 10.
+        separators (list[str], optional): A list of characters to use as separators. Defaults to a list of common punctuation marks and whitespace characters.
+    """
 
-    @patch('chunking.AzureChatOpenAI')  # Mock the AzureChatOpenAI class
-    def test_getChunks(self, MockAzureChatOpenAI):
-        # Mocking the LLM response for chunking
-        mock_llm = MockAzureChatOpenAI.return_value
-        mock_llm.invoke.return_value = ["chunk1", "chunk2", "chunk3"]
+    def __init__(self, chunk_size=1000, chunk_overlap=10, separators=None):
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
+        if separators is None:
+            self.separators = list(string.punctuation) + [" "]
+        else:
+            self.separators = separators
 
-        text_data = "Your large document or book goes here."
-        chunks = self.chunker.getChunks(text_data)
+    def split_text(self, text):
+        """Splits the given text into chunks.
 
-        # Verify the mock LLM was called correctly
-        mock_llm.invoke.assert_called_once_with({"document": text_data})
+        Args:
+            text (str): The text to split.
 
-        # Check if the returned chunks are as expected
-        expected_chunks = ["chunk1", "chunk2", "chunk3"]
-        self.assertEqual(chunks, expected_chunks)
+        Returns:
+            list[str]: A list of chunks.
+        """
 
-    @patch('chunking.AzureChatOpenAI')
-    def test_getChunks_empty_text(self, MockAzureChatOpenAI):
-        # Mocking the LLM response for an empty document
-        mock_llm = MockAzureChatOpenAI.return_value
-        mock_llm.invoke.return_value = []
+        chunks = []
+        start = 0
 
-        text_data = ""  # Empty document
-        chunks = self.chunker.getChunks(text_data)
+        while start <= len(text):
+            end = start + self.chunk_size
+            if end > len(text):
+                end = len(text)
 
-        # Verify the mock LLM was called with an empty document
-        mock_llm.invoke.assert_called_once_with({"document": text_data})
+            chunk = text[start:end]
 
-        # Check if the returned chunks are empty as expected
-        self.assertEqual(chunks, [])
+            if len(chunk) > self.chunk_size:
+                # If the chunk is too long, try splitting it using the separators
+                for separator in self.separators:
+                    if separator in chunk:
+                        split_index = chunk.rindex(separator)
+                        subchunk = chunk[:split_index + 1]
+                        if len(subchunk) <= self.chunk_size:
+                            chunks.append(subchunk)
+                            start = start + split_index + 1
+                            break
+                else:
+                    # If no separator was found, just take the entire chunk
+                    chunks.append(chunk)
+                    start = end
+            else:
+                chunks.append(chunk)
+                start = end - self.chunk_overlap
 
-    @patch('chunking.AzureChatOpenAI')
-    def test_getChunks_large_text(self, MockAzureChatOpenAI):
-        # Mocking the LLM response for a large document
-        mock_llm = MockAzureChatOpenAI.return_value
-        mock_llm.invoke.return_value = ["chunk1", "chunk2"]
-
-        text_data = "This is a very large document with multiple sections and paragraphs." * 100  # Large document
-        chunks = self.chunker.getChunks(text_data)
-
-        # Check that the LLM was invoked
-        mock_llm.invoke.assert_called_once_with({"document": text_data})
-
-        # Verify the result
-        expected_chunks = ["chunk1", "chunk2"]
-        self.assertEqual(chunks, expected_chunks)
-
-# Run the tests
-if __name__ == '__main__':
-    unittest.main()
+        return chunks

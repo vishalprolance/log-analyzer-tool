@@ -65,6 +65,9 @@ workaround = st.text_area(
 st.write(f'{len(workaround)} characters.')
 
 ########## UPOLOAD FILE
+if not os.path.exists('input'):
+    os.makedirs('input')
+
 uploaded_file = st.file_uploader(  "Upload your log file", 
                                     accept_multiple_files=False,
                                     type=['txt'],
@@ -72,12 +75,16 @@ uploaded_file = st.file_uploader(  "Upload your log file",
 if uploaded_file is None:
     st.error("Please upload a log file for analysis.")
 else:
-    print(type(uploaded_file))
-    with open('input/{uploaded_file.name}', 'wb') as file:
-        file.write(uploaded_file.read())
-    
-    with open('input/{uploaded_file.name}', 'r') as file:
-        st.text_area('Input Log File', ''.join(file), height=400)
+    # Define file path for saving the uploaded file
+    file_name = os.path.join('input', uploaded_file.name)
+
+    # Save the uploaded file to the 'input' directory
+    with open(file_name, 'wb') as file:
+        file.write(uploaded_file.getbuffer())
+
+    # Read and display the file in the text area
+    with open(file_name, 'r') as file:
+        st.text_area('Input Log File', file.read(), height=400)
         
 if st.button("Analyze :mag:", type="primary"):
     
@@ -90,8 +97,11 @@ if st.button("Analyze :mag:", type="primary"):
     ########## Backend - Chunking
     progress_text = "Chunking log file..."
     my_bar.progress(20, text=progress_text)
-    chunking_obj = Chunking.SemanticChunking(uploaded_file)
-    all_chunks = chunking_obj.getChunks()
+
+    # Assuming the file path is stored in 'file_path' after uploading
+    file_name = os.path.join('input', uploaded_file.name)
+    chunking_obj = Chunking.SemanticChunking(file_name)  # Initialize with file path if needed
+    all_chunks = chunking_obj.getChunks(file_name)  # Pass the file path or file name to getChunks()
 
     ######### Backend - VectorDB
     progress_text = "Initiaing vectorDB and inserting vectors..."

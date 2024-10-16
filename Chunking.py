@@ -6,10 +6,8 @@ from flair.models import SequenceTagger
 from flair.data import Sentence
 from flair.splitter import SegtokSentenceSplitter
 from sklearn.metrics.pairwise import cosine_similarity
-from dotenv import load_dotenv, find_dotenv
 from tqdm import tqdm
-from langchain_openai import AzureChatOpenAI
-from langchain.prompts import PromptTemplate
+import string
 
 class Chunking(ABC):
     @abstractmethod
@@ -22,16 +20,73 @@ class Chunking(ABC):
         """
         pass
 
+class RecursiveCharacterTextSplitter(Chunking):
+    """Splits text into chunks using a recursive approach based on character separators.
+
+    Args:
+        chunk_size (int, optional): The maximum size of each chunk in characters. Defaults to 1000.
+        chunk_overlap (int, optional): The number of characters to overlap between chunks. Defaults to 10.
+        separators (list[str], optional): A list of characters to use as separators. Defaults to a list of common punctuation marks and whitespace characters.
+    """
+
+    def __init__(self, chunk_size=1000, chunk_overlap=10, separators=None):
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
+        if separators is None:
+            self.separators = list(string.punctuation) + [" "]
+        else:
+            self.separators = separators
+
+    def getChunks(self, text):
+        """Splits the given text into chunks.
+
+        Args:
+            text (str): The text to split.
+
+        Returns:
+            list[str]: A list of chunks.
+        """
+
+        chunks = []
+        start = 0
+
+        while start <= len(text):
+            end = start + self.chunk_size
+            if end > len(text):
+                end = len(text)
+
+            chunk = text[start:end]
+
+            if len(chunk) > self.chunk_size:
+                # If the chunk is too long, try splitting it using the separators
+                for separator in self.separators:
+                    if separator in chunk:
+                        split_index = chunk.rindex(separator)
+                        subchunk = chunk[:split_index + 1]
+                        if len(subchunk) <= self.chunk_size:
+                            chunks.append(subchunk)
+                            start = start + split_index + 1
+                            break
+                else:
+                    # If no separator was found, just take the entire chunk
+                    chunks.append(chunk)
+                    start = end
+            else:
+                chunks.append(chunk)
+                start = end - self.chunk_overlap
+
+        return chunks
+
 class LineBasedChunk(Chunking):
     def __init__(self, file_name):
-        self.path=f'input/{file_name}'
+        self.file_name = os.path.join('input', uploaded_file.name)
         
     def getChunks(self):
         print(f'\n===== CHUNKING LOG FILE =====\n')
         lines_per_chunk = 10
         all_chunks = []
 
-        with open(self.path) as bigfile:
+        with open(self.file_name) as bigfile:
             chunk=""
             for lineno, line in enumerate(bigfile):
                 if (lineno+1) % lines_per_chunk == 0:
@@ -45,13 +100,14 @@ class LineBasedChunk(Chunking):
         return all_chunks  
     
 class FixedWindowOverlapChunking(Chunking):
-    def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 10):
+    def __init__(self, file_name, chunk_size: int = 1000, chunk_overlap: int = 10):
+        self.file_name = file_name
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
     
-    def getchunks(self, file_name: str) -> List[str]:
+    def getChunks(self, file_name: str) -> List[str]:
         """Splits text at the given chunk_size, and starts the next chunk from start - chunk_overlap position"""
-        with open(f'input/{file_name}','r') as file:
+        with open(self.file_name,'r') as file:
             text = file.read()
 
         all_chunks = []
@@ -67,14 +123,20 @@ class FixedWindowOverlapChunking(Chunking):
         return all_chunks
 
 class SemanticChunking(Chunking):
-    def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 10):
+    def __init__(self, file_name, chunk_size: int = 1000, chunk_overlap: int = 10):
+        self.file_name = file_name
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
 
-    def getchunks(self, file_name: str) -> List[str]:
-        with open(f'input/{file_name}','r') as file:
+    def getChunks(self, file_name: str) -> List[str]:
+        # Ensure the file exists at the given path
+        if not os.path.exists(file_name):
+            raise FileNotFoundError(f"The file at {file_name} does not exist.")
+
+        with open(file_name, 'r') as file:
             text = file.read()
 
+        # Initialize the sentence splitter
         splitter = SegtokSentenceSplitter()
 
         #Split text into sentences
@@ -83,14 +145,17 @@ class SemanticChunking(Chunking):
         all_chunks = []
         current_chunk = ""
 
+        # Chunking logic
         for sentence in sentences:
-            #Add sentence to the current chunk
-            if len(current_chunk) + len(sentence.to_plain_string()) <= chunk_size:
-                current_chunk += " " + sentence.to_plain_string()
+            sentence_text = sentence.to_plain_string()
+
+            #Add sentence to the current chunk if it fits
+            if len(current_chunk) + len(sentence_text) <= chunk_size:
+                current_chunk += " " + sentence_text
             else:
                 #If adding the next sentence exceeds max size, start a new chunk
                 all_chunks.append(current_chunk.strip())
-                current_chunk = sentence.to_plain_string()
+                current_chunk = sentence_text
 
         # Add the last chunk if it exists
         if current_chunk:
@@ -98,6 +163,7 @@ class SemanticChunking(Chunking):
 
         return all_chunks
 
+"""
 class EmbeddingChunking(Chunking):
     def __init__(self, chunk_size: int = 400):
         self.chunk_size = chunk_size
@@ -107,8 +173,6 @@ class EmbeddingChunking(Chunking):
             text = file.read()
 
         load_dotenv(find_dotenv())
-
-        """
         #Set Azure OpenAI API environment variables (ensure these are set in your environment)
         #You can also set these in your environment directly
         os.environ["OPENAI_API_KEY"] = "your-azure-openai-api-key"
@@ -117,7 +181,6 @@ class EmbeddingChunking(Chunking):
     
         #Initialize OpenAIEmbeddings using LangChain's Azure support
         embedding_model = AzureOpenAIEmbeddings(deployment="text-embedding-ada-002-01")  # Use your Azure model name
-        """
 
         #Step 1: Split the text into sentences
         def split_into_sentences(text):
@@ -185,7 +248,8 @@ class EmbeddingChunking(Chunking):
         chunks = form_chunks(sentences, embeddings, chunk_size=chunk_size)
     
         return chunks
-
+"""
+"""
 class AgenticChunking(Chunking):
     def __init__(self, model: str = "gpt-4o", api_version: str = "2023-03-15-preview", temperature: int = 1):
         self.llm = AzureChatOpenAI(
@@ -196,7 +260,7 @@ class AgenticChunking(Chunking):
         )
 
     self.prompt_template = PromptTemplate.from_template(
-       """I am providing a document below. 
+       """ """I am providing a document below. 
             Please split the document into chunks that maintain semantic coherence and ensure that each chunk represents a complete and meaningful unit of information. 
             Each chunk should stand alone, preserving the context and meaning without splitting key ideas across chunks. 
             Use your understanding of the content’s structure, topics, and flow to identify natural breakpoints in the text. 
@@ -207,11 +271,12 @@ class AgenticChunking(Chunking):
 
             Document:
             {document}
-            """ 
+            """ """
     )
 
     def getChunks(self, file_name: str) -> List[str]:
-        """Splits text_data into semantically coherent chunks using an LLM-based approach."""
+        """ """Splits text_data into semantically coherent chunks using an LLM-based approach.""" """
         chain = self.prompt_template | self.llm
         result = chain.invoke({"document": text_data})
         return result
+"""
