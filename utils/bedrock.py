@@ -8,7 +8,9 @@ from typing import Optional
 # External Dependencies:
 import boto3
 from botocore.config import Config
+import logging
 
+logging.basicConfig(level=logging.INFO)
 
 def get_bedrock_client(
     assumed_role: Optional[str] = None,
@@ -49,31 +51,36 @@ def get_bedrock_client(
             "mode": "standard",
         },
     )
-    session = boto3.Session(**session_kwargs)
+    try:
+        session = boto3.Session(**session_kwargs)
 
-    if assumed_role:
-        print(f"  Using role: {assumed_role}", end='')
-        sts = session.client("sts")
-        response = sts.assume_role(
-            RoleArn=str(assumed_role),
-            RoleSessionName="langchain-llm-1"
+        if assumed_role:
+            print(f"  Using role: {assumed_role}", end='')
+            sts = session.client("sts")
+            response = sts.assume_role(
+                RoleArn=str(assumed_role),
+                RoleSessionName="langchain-llm-1"
+            )
+            print(" ... successful!")
+            client_kwargs["aws_access_key_id"] = response["Credentials"]["AccessKeyId"]
+            client_kwargs["aws_secret_access_key"] = response["Credentials"]["SecretAccessKey"]
+            client_kwargs["aws_session_token"] = response["Credentials"]["SessionToken"]
+
+        if runtime:
+            service_name='bedrock-runtime'
+        else:
+            service_name='bedrock'
+
+        bedrock_client = session.client(
+            service_name=service_name,
+            config=retry_config,
+            **client_kwargs
         )
-        print(" ... successful!")
-        client_kwargs["aws_access_key_id"] = response["Credentials"]["AccessKeyId"]
-        client_kwargs["aws_secret_access_key"] = response["Credentials"]["SecretAccessKey"]
-        client_kwargs["aws_session_token"] = response["Credentials"]["SessionToken"]
 
-    if runtime:
-        service_name='bedrock-runtime'
-    else:
-        service_name='bedrock'
+        logging.info("boto3 Bedrock client successfully created!")
+        logging.info(bedrock_client._endpoint)
+        return bedrock_client
 
-    bedrock_client = session.client(
-        service_name=service_name,
-        config=retry_config,
-        **client_kwargs
-    )
-
-    print("boto3 Bedrock client successfully created!")
-    print(bedrock_client._endpoint)
-    return bedrock_client
+    except Exception as e:
+        logging.error(f"Failed to create boto3 Bedrock client: {e}")
+        raise

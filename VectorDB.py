@@ -6,15 +6,14 @@ class VectorDB(ABC):
     def getVectorDB(self, path: str) -> object:
         pass
 
-    
 class FAISS_VDB(VectorDB):
     def __init__(self, directory):
         """
         Initiate the object with the server or application framework e.g. dotnet, ibmbpm, linux etc
         """
-        self.directory=f'data/{directory}'
+        self.directory = f'data/{directory}'
         
-    def getVectorDB(self):
+    def getVectorDB(self, path: str):
         import numpy as np
         from langchain.vectorstores import FAISS
         from langchain.indexes import VectorstoreIndexCreator
@@ -34,12 +33,12 @@ class FAISS_VDB(VectorDB):
         
         # Load all the Manuals
         print(f'Manuals dir: {self.directory}')
-        loader = PyPDFDirectoryLoader(self.directory)
+        loader = PyPDFDirectoryLoader(path)
         documents = loader.load()
 
         text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size = 1000,
-            chunk_overlap  = 100,
+            chunk_size=1000,
+            chunk_overlap=100,
         )
         
         docs = text_splitter.split_documents(documents)
@@ -51,9 +50,9 @@ class FAISS_VDB(VectorDB):
             sample_embedding = np.array(bedrock_embeddings.embed_query(docs[0].page_content))
             print(f'Sample embedding of a document chunk: {sample_embedding}\nSize of the embedding: {sample_embedding.shape}')
         except ValueError as error:
-            if  "AccessDeniedException" in str(error):
+            if "AccessDeniedException" in str(error):
                 print(f"\x1b[41m{error}\
-                \nTo troubeshoot this issue please refer to the following resources.\
+                \nTo troubleshoot this issue please refer to the following resources.\
                  \nhttps://docs.aws.amazon.com/IAM/latest/UserGuide/troubleshoot_access-denied.html\
                  \nhttps://docs.aws.amazon.com/bedrock/latest/userguide/security-iam.html\x1b[0m\n")      
                 class StopExecution(ValueError):
@@ -73,8 +72,7 @@ class FAISS_VDB(VectorDB):
         print('===== END OF VECTOR LOADING =====\n')
         
         return vectorstore_faiss
-    
-    
+
 class Chroma_VDB(VectorDB):
     def getVectorDB(self, path: str):
         pass
